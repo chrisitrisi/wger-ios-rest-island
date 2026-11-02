@@ -7,6 +7,7 @@ permissions:
   contents: read
 jobs:
   build:
+    if: "!contains(github.event.head_commit.message, '[metadata-only]')"
     runs-on: macos-latest
     timeout-minutes: 45
     steps:
@@ -46,6 +47,16 @@ jobs:
           cp -R build/ios/iphoneos/Runner.app dist/Payload/
           test -d dist/Payload/Runner.app/PlugIns/WgerRestWidget.appex
           /usr/libexec/PlistBuddy -c "Print NSSupportsLiveActivities" dist/Payload/Runner.app/Info.plist | grep true
+          python3 - <<'PY'
+          import plistlib
+          from pathlib import Path
+          root = Path('dist/Payload/Runner.app')
+          for bundle in [root, *root.glob('PlugIns/*.appex')]:
+              info = plistlib.loads((bundle / 'Info.plist').read_bytes())
+              for key in ('CFBundleName', 'CFBundleIdentifier', 'CFBundleExecutable', 'CFBundleVersion', 'CFBundleShortVersionString'):
+                  assert isinstance(info.get(key), str) and info[key].strip(), (bundle, key)
+              assert (bundle / info['CFBundleExecutable']).is_file(), bundle
+          PY
           cd dist
           zip -qry wger-RestIsland.ipa Payload
       - uses: actions/upload-artifact@v7
