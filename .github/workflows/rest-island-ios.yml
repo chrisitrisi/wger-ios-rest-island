@@ -1,0 +1,65 @@
+name: Build wger with Rest Island
+on:
+  push:
+    branches: [dynamic-island]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    if: "!contains(github.event.head_commit.message, '[metadata-only]')"
+    runs-on: macos-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+      - uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+      - uses: ./.github/actions/flutter-common
+      - name: Configure native Live Activity
+        run: |
+          gem install xcodeproj --no-document
+          ruby scripts/configure_rest_activity.rb
+      - name: Format new Dart file
+        run: dart format lib/features/routines/notifications/rest_live_activity.dart
+      - name: Prove Live Activity regression test detects missing platform calls
+        run: |
+          cp lib/features/routines/notifications/rest_live_activity.dart /tmp/rest_live_activity.dart
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('lib/features/routines/notifications/rest_live_activity.dart')
+          p.write_text(p.read_text().replace("await _channel.invokeMethod<void>(active ? 'sync' : 'end', arguments);", 'await Future<void>.value();'))
+          PY
+          if flutter test test/features/routines/notifications/rest_live_activity_test.dart; then
+            cp /tmp/rest_live_activity.dart lib/features/routines/notifications/rest_live_activity.dart
+            echo 'Regression test did not detect the deliberately broken bridge'
+            exit 1
+          fi
+          cp /tmp/rest_live_activity.dart lib/features/routines/notifications/rest_live_activity.dart
+      - name: Analyze
+        run: flutter analyze
+      - name: Test rest and workout behavior
+        run: flutter test test/features/routines/notifications test/features/routines/widgets/gym_mode/timer_test.dart test/features/routines/providers/gym_state_test.dart
+      - name: Build unsigned wger IPA
+        run: |
+          flutter build ios --release --no-codesign
+          mkdir -p dist/Payload
+          cp -R build/ios/iphoneos/Runner.app dist/Payload/
+          test -d dist/Payload/Runner.app/PlugIns/WgerRestWidget.appex
+          /usr/libexec/PlistBuddy -c "Print NSSupportsLiveActivities" dist/Payload/Runner.app/Info.plist | grep true
+          python3 - <<'PY'
+          import plistlib
+          from pathlib import Path
+          root = Path('dist/Payload/Runner.app')
+          for bundle in [root, *root.glob('PlugIns/*.appex')]:
+              info = plistlib.loads((bundle / 'Info.plist').read_bytes())
+              for key in ('CFBundleName', 'CFBundleIdentifier', 'CFBundleExecutable', 'CFBundleVersion', 'CFBundleShortVersionString'):
+                  assert isinstance(info.get(key), str) and info[key].strip(), (bundle, key)
+              assert (bundle / info['CFBundleExecutable']).is_file(), bundle
+          PY
+          cd dist
+          zip -qry wger-RestIsland.ipa Payload
+      - uses: actions/upload-artifact@v7
+        with:
+          name: wger-RestIsland-IPA
+          path: dist/wger-RestIsland.ipa

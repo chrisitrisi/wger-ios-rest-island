@@ -1,0 +1,61 @@
+name: Repair IPA bundle metadata
+on:
+  push:
+    branches: [dynamic-island]
+    paths: [.github/workflows/repair-ipa-metadata.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v7
+        with:
+          name: wger-RestIsland-IPA
+          run-id: 41445284735
+          github-token: ${{ github.token }}
+          path: original
+      - name: Repair metadata and verify every other archive entry is unchanged
+        run: |
+          mkdir -p dist
+          python3 - <<'PY'
+          from pathlib import Path
+          import zipfile, plistlib, hashlib
+          original = Path('original/wger-RestIsland.ipa')
+          output = Path('dist/wger-RestIsland-fixed.ipa')
+          target = 'Payload/Runner.app/PlugIns/WgerRestWidget.appex/Info.plist'
+          source = plistlib.loads(Path('ios/RestActivity/Info.plist').read_bytes())
+          with zipfile.ZipFile(original) as old:
+              # Regression check: reproduce the exact device-reported packaging defect.
+              metadata = plistlib.loads(old.read(target))
+              assert not metadata.get('CFBundleName'), 'Unexpected source artifact'
+              metadata['CFBundleName'] = source['CFBundleName']
+              metadata['CFBundleInfoDictionaryVersion'] = source['CFBundleInfoDictionaryVersion']
+              with zipfile.ZipFile(output, 'w') as new:
+                  for entry in old.infolist():
+                      data = old.read(entry.filename)
+                      if entry.filename == target:
+                          data = plistlib.dumps(metadata, fmt=plistlib.FMT_BINARY)
+                      new.writestr(entry, data)
+          with zipfile.ZipFile(original) as old, zipfile.ZipFile(output) as new:
+              assert new.testzip() is None
+              assert old.namelist() == new.namelist()
+              for name in old.namelist():
+                  if name != target:
+                      assert hashlib.sha256(old.read(name)).digest() == hashlib.sha256(new.read(name)).digest(), name
+              for name in new.namelist():
+                  if name.endswith('.app/Info.plist') or name.endswith('.appex/Info.plist'):
+                      info = plistlib.loads(new.read(name))
+                      for key in ('CFBundleName', 'CFBundleIdentifier', 'CFBundleExecutable', 'CFBundleVersion', 'CFBundleShortVersionString'):
+                          assert isinstance(info.get(key), str) and info[key].strip(), (name, key)
+                      assert str(Path(name).parent / info['CFBundleExecutable']) in new.namelist(), name
+              assert plistlib.loads(new.read('Payload/Runner.app/Info.plist'))['NSSupportsLiveActivities']
+          print('Verified: required bundle metadata, executables, archive integrity and unchanged binaries.')
+          PY
+      - uses: actions/upload-artifact@v7
+        with:
+          name: wger-RestIsland-fixed-IPA
+          path: dist/wger-RestIsland-fixed.ipa
