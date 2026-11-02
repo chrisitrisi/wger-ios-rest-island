@@ -21,6 +21,20 @@ jobs:
           ruby scripts/configure_rest_activity.rb
       - name: Format new Dart file
         run: dart format lib/features/routines/notifications/rest_live_activity.dart
+      - name: Prove Live Activity regression test detects missing platform calls
+        run: |
+          cp lib/features/routines/notifications/rest_live_activity.dart /tmp/rest_live_activity.dart
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('lib/features/routines/notifications/rest_live_activity.dart')
+          p.write_text(p.read_text().replace("await _channel.invokeMethod<void>(active ? 'sync' : 'end', arguments);", 'await Future<void>.value();'))
+          PY
+          if flutter test test/features/routines/notifications/rest_live_activity_test.dart; then
+            cp /tmp/rest_live_activity.dart lib/features/routines/notifications/rest_live_activity.dart
+            echo 'Regression test did not detect the deliberately broken bridge'
+            exit 1
+          fi
+          cp /tmp/rest_live_activity.dart lib/features/routines/notifications/rest_live_activity.dart
       - name: Analyze
         run: flutter analyze
       - name: Test rest and workout behavior
