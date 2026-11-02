@@ -29,6 +29,8 @@ end
 widget.build_configurations.each do |config|
   config.build_settings.merge!({
     'PRODUCT_BUNDLE_IDENTIFIER' => 'at.chrisitrisi.wger.rest.widget',
+    'PRODUCT_NAME' => 'WgerRestWidget',
+    'PRODUCT_MODULE_NAME' => 'WgerRestWidget',
     'INFOPLIST_FILE' => 'RestActivity/Info.plist',
     'SWIFT_VERSION' => '5.0',
     'IPHONEOS_DEPLOYMENT_TARGET' => '16.2',
