@@ -18,6 +18,9 @@ runner.add_dependency(widget)
 embed = runner.copy_files_build_phases.find { |p| p.name == 'Embed App Extensions' } ||
   runner.new_copy_files_build_phase('Embed App Extensions')
 embed.dst_subfolder_spec = '13'
+# Embed before Flutter's scripts: Thin Binary reads the finished app bundle.
+runner.build_phases.delete(embed)
+runner.build_phases.insert(0, embed)
 unless embed.files_references.include?(widget.product_reference)
   embed.add_file_reference(widget.product_reference).settings = { 'ATTRIBUTES' => ['RemoveHeadersOnCopy'] }
 end
