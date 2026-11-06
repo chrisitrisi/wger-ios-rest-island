@@ -1,0 +1,45 @@
+name: Validate upstream Live Activities
+on:
+  push:
+    branches: [validate/ios-rest-live-activities]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: macos-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+      - uses: ./.github/actions/flutter-common
+      - name: Check formatting
+        run: dart format --output=none --set-exit-if-changed lib/features/routines/notifications/rest_live_activity.dart test/features/routines/notifications/rest_live_activity_test.dart
+      - name: Analyze
+        run: flutter analyze
+      - name: Test rest and workout behavior
+        run: flutter test test/features/routines/notifications test/features/routines/widgets/gym_mode/timer_test.dart test/features/routines/providers/gym_state_test.dart
+      - name: Validate native project and build
+        run: |
+          plutil -lint ios/Runner.xcodeproj/project.pbxproj ios/RestActivity/Info.plist
+          flutter build ios --release --no-codesign
+          test -d build/ios/iphoneos/Runner.app/PlugIns/WgerRestWidget.appex
+          python3 - <<'PY'
+          import plistlib
+          from pathlib import Path
+          root = Path('build/ios/iphoneos/Runner.app')
+          app = plistlib.loads((root / 'Info.plist').read_bytes())
+          widget = root / 'PlugIns/WgerRestWidget.appex'
+          info = plistlib.loads((widget / 'Info.plist').read_bytes())
+          assert app['NSSupportsLiveActivities']
+          assert app['CFBundleIdentifier'] == 'de.wger.flutter.community'
+          assert info['CFBundleIdentifier'] == app['CFBundleIdentifier'] + '.rest'
+          for key in ('CFBundleVersion', 'CFBundleShortVersionString'):
+              assert info[key] == app[key], (key, info[key], app[key])
+          assert (widget / info['CFBundleExecutable']).is_file()
+          print('Verified embedded extension, official bundle IDs and matching versions.')
+          PY
