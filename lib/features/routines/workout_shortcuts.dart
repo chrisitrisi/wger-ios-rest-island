@@ -144,6 +144,9 @@ Future<String> _perform(Ref ref, MethodCall call) async {
     }
     await notifier.open(routine, day.day!.id!, day.iteration);
     state = ref.read(gymStateProvider);
+    if (call.method == 'log' && state.getSlotEntryPageByIndex()?.type == SlotPageType.log) {
+      await notifier.startNewEntry();
+    }
   }
 
   if (call.method == 'start') {
