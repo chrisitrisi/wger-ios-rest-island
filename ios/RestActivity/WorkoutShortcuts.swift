@@ -144,6 +144,18 @@ struct FinishWorkoutAction: AppIntent {
 }
 
 @available(iOS 16.0, *)
+struct SaveWorkoutAction: AppIntent {
+  static var title: LocalizedStringResource = "Workout beenden und speichern"
+  static var openAppWhenRun: Bool = true
+
+  @MainActor
+  func perform() async throws -> some IntentResult & ReturnsValue<String> {
+    let value = try await WorkoutShortcutBridge.run("saveFinish")
+    return .result(value: value)
+  }
+}
+
+@available(iOS 16.0, *)
 struct OpenRoutinesAction: AppIntent {
   static var title: LocalizedStringResource = "Trainingspläne öffnen"
   static var openAppWhenRun: Bool = true
@@ -170,6 +182,8 @@ struct WgerWorkoutShortcuts: AppShortcutsProvider {
                 shortTitle: "Satzpause verlängern", systemImageName: "timer")
     AppShortcut(intent: WorkoutStatusAction(), phrases: ["Zeige meinen Workoutstatus in \(.applicationName)"],
                 shortTitle: "Workoutstatus abrufen", systemImageName: "list.bullet")
+    AppShortcut(intent: SaveWorkoutAction(), phrases: ["Beende mein Workout in \(.applicationName)"],
+                shortTitle: "Workout beenden", systemImageName: "checkmark.flag")
     AppShortcut(intent: FinishWorkoutAction(), phrases: ["Öffne meinen Workoutabschluss in \(.applicationName)"],
                 shortTitle: "Workoutabschluss öffnen", systemImageName: "flag.checkered")
     AppShortcut(intent: OpenRoutinesAction(), phrases: ["Öffne meine Trainingspläne in \(.applicationName)"],

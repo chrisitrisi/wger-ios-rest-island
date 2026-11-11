@@ -49,7 +49,7 @@ jobs:
       - name: Analyze
         run: flutter analyze
       - name: Test rest and workout behavior
-        run: flutter test test/features/routines/notifications test/features/routines/widgets/gym_mode/timer_test.dart test/features/routines/providers/gym_state_test.dart
+        run: flutter test test/features/routines/notifications test/features/routines/widgets/gym_mode/timer_test.dart test/features/routines/providers/gym_state_test.dart test/features/routines/providers/workout_session_repository_test.dart
       - name: Build unsigned wger IPA
         run: |
           flutter build ios --release --no-codesign
@@ -74,3 +74,26 @@ jobs:
         with:
           name: wger-RestIsland-IPA
           path: dist/wger-RestIsland-Shortcuts.ipa
+
+  download:
+    if: github.ref == 'refs/heads/feature/ios-workout-shortcuts'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v7
+        with:
+          name: wger-RestIsland-IPA
+      - name: Publish SideStore download for this build
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="workout-shortcuts-${GITHUB_SHA:0:8}"
+          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$tag" wger-RestIsland-Shortcuts.ipa --clobber --repo "$GITHUB_REPOSITORY"
+          else
+            gh release create "$tag" wger-RestIsland-Shortcuts.ipa --repo "$GITHUB_REPOSITORY" \
+              --target "$GITHUB_SHA" --prerelease --latest=false --title "wger Rest Island · Workout-Kurzbefehle" \
+              --notes "SideStore-IPA mit Dynamic Island und neun iOS-Trainingsaktionen."
+          fi

@@ -36,6 +36,7 @@ import 'package:wger/features/routines/notifications/workout_notification_contro
 import 'package:wger/features/routines/providers/gym_state.dart';
 import 'package:wger/features/routines/providers/gym_state_notifier.dart';
 import 'package:wger/features/routines/providers/routines_notifier.dart';
+import 'package:wger/features/routines/providers/workout_session_notifier.dart';
 import 'package:wger/features/routines/screens/gym_mode.dart';
 import 'package:wger/features/routines/screens/routine_list_screen.dart';
 
@@ -175,6 +176,31 @@ Future<String> _perform(Ref ref, MethodCall call) async {
         await WidgetsBinding.instance.endOfFrame;
       }
       return call.method == 'finish' ? 'Abschluss geöffnet. Tippe zum Abschließen auf Speichern.' : state.dayDataGym.day!.name;
+    case 'saveFinish':
+      final entries = state.progress.values.where((p) => p.done).map((p) => p.loggedEntry);
+      final ids = entries.map((entry) => entry?.sessionId).toSet();
+      if (ids.length > 1 || ids.contains(null)) {
+        _fail('Prüfe die zugeordneten Sätze unter „Workoutabschluss öffnen“.');
+      }
+      await ref.read(workoutSessionProvider.future);
+      final saved = await ref.read(workoutSessionProvider.notifier).finishGymSession(
+        routineId: state.routine.id!,
+        dayId: state.dayId,
+        start: state.workoutStart,
+        end: now,
+        sessionId: ids.firstOrNull,
+      );
+      if (!saved) {
+        _fail('Prüfe die Sitzung unter „Workoutabschluss öffnen“.');
+      }
+      if (ref.read(gymModeVisibleProvider)) {
+        nav.popUntil((route) => route.settings.name == GymModeScreen.routeName || route.isFirst);
+        if (nav.canPop()) {
+          nav.pop();
+        }
+      }
+      notifier.clear();
+      return now.toUtc().toIso8601String();
     case 'log':
       if (page?.type != SlotPageType.log || !await notifier.logPlannedSet(page!.key)) {
         _fail('Öffne einen ungespeicherten Satz mit vollständigen Werten.');

@@ -10,6 +10,7 @@ Installiere die IPA mit SideStore, öffne wger und melde dich bei deinem gewohnt
 | Satzpause verlängern | Verlängert den laufenden Countdown um 1 bis 1800 Sekunden, standardmäßig 30. |
 | Satzpause überspringen | Wechselt von der laufenden Pause zur nächsten Trainingsseite. |
 | Workoutstatus abrufen | Liefert JSON-Text. Über „Wörterbuch aus Eingabe abrufen“ lassen sich `active`, `routine`, `day`, `startedAt`, `restEndsAt` und `completedSets` auslesen. Bei inaktivem Training enthält die Antwort nur `active: false`. Zeiten sind UTC. |
+| Workout beenden und speichern | Speichert die wger-Sitzung direkt und gibt die Endzeit in UTC zurück. Die NOOP-Aufzeichnung separat stoppen. |
 | Workoutabschluss öffnen | Öffnet das vorausgefüllte Abschlussformular. Zeiten und Notizen prüfen und auf **Speichern** tippen. |
 | Trainingspläne öffnen | Öffnet die Planliste zur manuellen Auswahl. |
 
