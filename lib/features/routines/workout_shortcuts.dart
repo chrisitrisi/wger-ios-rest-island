@@ -102,7 +102,8 @@ Future<String> _perform(Ref ref, MethodCall call) async {
   final notifier = ref.read(gymStateProvider.notifier);
   var state = ref.read(gymStateProvider);
   final now = clock.now();
-  final name = call.argument<String>('day') ?? '';
+  final arguments = call.arguments as Map<Object?, Object?>;
+  final name = arguments['day'] as String? ?? '';
   if (!state.isInitialized || state.validUntil.isBefore(now)) {
     final raw = await PreferenceHelper.asyncPref.getString(PREFS_WORKOUT_PROGRESS);
     WorkoutProgress? saved;
@@ -216,7 +217,7 @@ Future<String> _perform(Ref ref, MethodCall call) async {
       notifier.skipRest();
       return 'Satzpause übersprungen';
     case 'extend':
-      final seconds = call.argument<int>('seconds') ?? 30;
+      final seconds = arguments['seconds'] as int? ?? 30;
       if (seconds < 1 || seconds > 1800) {
         _fail('Wähle zwischen 1 und 1800 Sekunden.');
       }
