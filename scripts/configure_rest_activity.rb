@@ -10,7 +10,7 @@ def source(group, name)
 end
 attributes = source(group, 'RestAttributes.swift')
 plugin = source(group, 'RestActivityPlugin.swift')
-runner.add_file_references([attributes, plugin])
+runner.add_file_references([attributes, plugin, source(group, 'WorkoutShortcuts.swift')])
 widget = project.targets.find { |t| t.name == 'WgerRestWidget' } ||
   project.new_target(:app_extension, 'WgerRestWidget', :ios, '16.2')
 widget.add_file_references([attributes, source(group, 'RestWidget.swift')])

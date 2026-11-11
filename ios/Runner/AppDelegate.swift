@@ -120,6 +120,10 @@ private final class NotificationActionTasks: NSObject, FlutterPlugin {
       GeneratedPluginRegistrant.register(with: registry)
     }
     GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
+    if #available(iOS 16.0, *),
+      let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "WorkoutShortcutBridge") {
+      WorkoutShortcutBridge.register(with: registrar)
+    }
     if #available(iOS 16.2, *),
       let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "RestActivityPlugin") {
       RestActivityPlugin.register(with: registrar)

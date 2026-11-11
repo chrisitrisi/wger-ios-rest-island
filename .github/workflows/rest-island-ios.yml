@@ -1,7 +1,7 @@
 name: Build wger with Rest Island
 on:
   push:
-    branches: [dynamic-island]
+    branches: [dynamic-island, feature/ios-workout-shortcuts]
   workflow_dispatch:
 permissions:
   contents: read
@@ -36,6 +36,16 @@ jobs:
             exit 1
           fi
           cp /tmp/rest_live_activity.dart lib/features/routines/notifications/rest_live_activity.dart
+      - name: Verify workout shortcut selection regression
+        run: |
+          cp lib/features/routines/workout_shortcuts.dart "$RUNNER_TEMP/shortcuts.dart"
+          sed -i '' 's/ || day.isRest || / || /' lib/features/routines/workout_shortcuts.dart
+          if flutter test test/features/routines/workout_shortcuts_test.dart; then
+            echo "Selection regression was not detected"
+            exit 1
+          fi
+          cp "$RUNNER_TEMP/shortcuts.dart" lib/features/routines/workout_shortcuts.dart
+          flutter test test/features/routines/workout_shortcuts_test.dart
       - name: Analyze
         run: flutter analyze
       - name: Test rest and workout behavior
@@ -57,9 +67,10 @@ jobs:
                   assert isinstance(info.get(key), str) and info[key].strip(), (bundle, key)
               assert (bundle / info['CFBundleExecutable']).is_file(), bundle
           PY
+          test -s dist/Payload/Runner.app/Metadata.appintents/extract.actionsdata
           cd dist
-          zip -qry wger-RestIsland.ipa Payload
+          zip -qry wger-RestIsland-Shortcuts.ipa Payload
       - uses: actions/upload-artifact@v7
         with:
           name: wger-RestIsland-IPA
-          path: dist/wger-RestIsland.ipa
+          path: dist/wger-RestIsland-Shortcuts.ipa
