@@ -10,10 +10,12 @@ def source(group, name)
 end
 attributes = source(group, 'RestAttributes.swift')
 plugin = source(group, 'RestActivityPlugin.swift')
-runner.add_file_references([attributes, plugin, source(group, 'WorkoutShortcuts.swift')])
+# The Live Activity buttons: the widget draws them, the app runs them
+island_intent = source(group, 'WorkoutIslandIntent.swift')
+runner.add_file_references([attributes, plugin, island_intent, source(group, 'WorkoutShortcuts.swift')])
 widget = project.targets.find { |t| t.name == 'WgerRestWidget' } ||
   project.new_target(:app_extension, 'WgerRestWidget', :ios, '16.2')
-widget.add_file_references([attributes, source(group, 'RestWidget.swift')])
+widget.add_file_references([attributes, island_intent, source(group, 'RestWidget.swift')])
 runner.add_dependency(widget)
 embed = runner.copy_files_build_phases.find { |p| p.name == 'Embed App Extensions' } ||
   runner.new_copy_files_build_phase('Embed App Extensions')
