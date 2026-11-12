@@ -1,7 +1,7 @@
 name: Build wger with Rest Island
 on:
   push:
-    branches: [dynamic-island, feature/ios-workout-shortcuts]
+    branches: [dynamic-island, feature/ios-workout-shortcuts, feature/ios-island-shortcuts]
   workflow_dispatch:
 permissions:
   contents: read
@@ -15,21 +15,29 @@ jobs:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/flutter-common
       - name: Format new Dart file
-        run: dart format lib/features/routines/notifications/rest_live_activity.dart
+        run: dart format lib/features/routines/notifications/workout_live_activity.dart
       - name: Prove Live Activity regression test detects missing platform calls
         run: |
-          cp lib/features/routines/notifications/rest_live_activity.dart /tmp/rest_live_activity.dart
-          python3 - <<'PY'
+          file=lib/features/routines/notifications/workout_live_activity.dart
+          cp "$file" "$RUNNER_TEMP/workout_live_activity.dart"
+          python3 - "$file" <<'PY'
+          import sys
           from pathlib import Path
-          p = Path('lib/features/routines/notifications/rest_live_activity.dart')
-          p.write_text(p.read_text().replace("await _channel.invokeMethod<void>(active ? 'sync' : 'end', arguments);", 'await Future<void>.value();'))
+          p = Path(sys.argv[1])
+          old = p.read_text()
+          call = '''await WORKOUT_LIVE_ACTIVITY_CHANNEL.invokeMethod<void>(
+                    content == null ? 'end' : 'sync',
+                    content,
+                  );'''
+          assert call in old, 'platform call not found, update this step'
+          p.write_text(old.replace(call, 'await Future<void>.value();'))
           PY
-          if flutter test test/features/routines/notifications/rest_live_activity_test.dart; then
-            cp /tmp/rest_live_activity.dart lib/features/routines/notifications/rest_live_activity.dart
+          if flutter test test/features/routines/notifications/workout_live_activity_test.dart; then
+            cp "$RUNNER_TEMP/workout_live_activity.dart" "$file"
             echo 'Regression test did not detect the deliberately broken bridge'
             exit 1
           fi
-          cp /tmp/rest_live_activity.dart lib/features/routines/notifications/rest_live_activity.dart
+          cp "$RUNNER_TEMP/workout_live_activity.dart" "$file"
       - name: Verify workout shortcut selection regression
         run: |
           cp lib/features/routines/workout_shortcuts.dart "$RUNNER_TEMP/shortcuts.dart"
@@ -40,10 +48,20 @@ jobs:
           fi
           cp "$RUNNER_TEMP/shortcuts.dart" lib/features/routines/workout_shortcuts.dart
           flutter test test/features/routines/workout_shortcuts_test.dart
+      - name: Prove shortcut test detects frame waits for background actions
+        run: |
+          cp lib/features/routines/workout_shortcuts.dart "$RUNNER_TEMP/shortcuts.dart"
+          sed -i "s/const SHORTCUT_NAVIGATION_METHODS = {'start', 'finish', 'plans'};/const SHORTCUT_NAVIGATION_METHODS = {'start', 'finish', 'plans', 'log'};/" lib/features/routines/workout_shortcuts.dart
+          grep -q "'plans', 'log'}" lib/features/routines/workout_shortcuts.dart
+          if flutter test test/features/routines/workout_shortcuts_test.dart; then
+            echo "Background frame regression was not detected"
+            exit 1
+          fi
+          cp "$RUNNER_TEMP/shortcuts.dart" lib/features/routines/workout_shortcuts.dart
       - name: Analyze
         run: flutter analyze
       - name: Test rest and workout behavior
-        run: flutter test test/features/routines/notifications test/features/routines/widgets/gym_mode/timer_test.dart test/features/routines/providers/gym_state_test.dart test/features/routines/providers/workout_session_repository_test.dart
+        run: flutter test test/features/routines/notifications test/features/routines/workout_shortcuts_test.dart test/features/routines/widgets/gym_mode/timer_test.dart test/features/routines/providers/gym_state_test.dart test/features/routines/providers/workout_session_repository_test.dart
   build:
     if: "!contains(github.event.head_commit.message, '[metadata-only]')"
     runs-on: macos-26-intel
@@ -73,7 +91,8 @@ jobs:
           identifiers = {action['identifier'] for action in metadata['actions'].values()}
           expected = {'StartWorkoutAction', 'StartWithNoopAction', 'LogSetAction', 'SkipRestAction',
                       'ExtendRestAction', 'WorkoutStatusAction', 'FinishWorkoutAction', 'SaveWorkoutAction',
-                      'OpenRoutinesAction'}
+                      'OpenRoutinesAction', 'RestEndAction', 'RestRemainingAction',
+                      'LogSetWithValuesAction', 'NextSetAction', 'WorkoutIslandIntent'}
           assert expected <= identifiers, sorted(expected - identifiers)
           for bundle in [root, *root.glob('PlugIns/*.appex')]:
               info = plistlib.loads((bundle / 'Info.plist').read_bytes())
@@ -89,7 +108,7 @@ jobs:
           path: dist/wger-RestIsland-Shortcuts.ipa
 
   download:
-    if: github.ref == 'refs/heads/feature/ios-workout-shortcuts'
+    if: github.ref == 'refs/heads/feature/ios-workout-shortcuts' || github.ref == 'refs/heads/feature/ios-island-shortcuts'
     needs: [build, verify]
     runs-on: ubuntu-latest
     permissions:
@@ -108,5 +127,5 @@ jobs:
           else
             gh release create "$tag" wger-RestIsland-Shortcuts.ipa --repo "$GITHUB_REPOSITORY" \
               --target "$GITHUB_SHA" --prerelease --latest=false --title "wger Rest Island · Workout-Kurzbefehle" \
-              --notes "SideStore-IPA mit Dynamic Island und neun iOS-Trainingsaktionen."
+              --notes "SideStore-IPA mit Live Activity für das ganze Workout (Buttons ab iOS 17) und 13 Kurzbefehle-Aktionen."
           fi

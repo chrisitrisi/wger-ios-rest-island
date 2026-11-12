@@ -25,14 +25,19 @@ enum WorkoutShortcutBridge {
     }
   }
 
-  static func run(_ method: String, arguments: [String: Any] = [:]) async throws -> String {
+  /// [background] is for actions with openAppWhenRun = false: iOS may start
+  /// wger without drawing frames, so it gives up sooner with a clear message.
+  static func run(_ method: String, arguments: [String: Any] = [:],
+                  background: Bool = false) async throws -> String {
     // Cold launches create the Flutter engine and install the Dart handler asynchronously.
-    for _ in 0..<150 {
+    for _ in 0..<(background ? 60 : 150) {
       if ready { break }
       try await Task.sleep(nanoseconds: 100_000_000)
     }
     guard ready, let channel = channel else {
-      throw WorkoutActionError(message: "wger ist noch nicht bereit. Öffne die App und versuche es erneut.")
+      throw WorkoutActionError(message: background
+        ? "wger läuft nicht im Hintergrund. Öffne wger einmal und versuche es erneut."
+        : "wger ist noch nicht bereit. Öffne die App und versuche es erneut.")
     }
     return try await withCheckedThrowingContinuation { continuation in
       channel.invokeMethod(method, arguments: arguments) { result in
@@ -83,11 +88,11 @@ struct StartWithNoopAction: AppIntent {
 @available(iOS 16.0, *)
 struct LogSetAction: AppIntent {
   static var title: LocalizedStringResource = "Aktuellen Satz speichern"
-  static var openAppWhenRun: Bool = true
+  static var openAppWhenRun: Bool = false
 
   @MainActor
   func perform() async throws -> some IntentResult & ReturnsValue<String> {
-    let value = try await WorkoutShortcutBridge.run("log")
+    let value = try await WorkoutShortcutBridge.run("log", background: true)
     return .result(value: value)
   }
 }
@@ -95,11 +100,11 @@ struct LogSetAction: AppIntent {
 @available(iOS 16.0, *)
 struct SkipRestAction: AppIntent {
   static var title: LocalizedStringResource = "Satzpause überspringen"
-  static var openAppWhenRun: Bool = true
+  static var openAppWhenRun: Bool = false
 
   @MainActor
   func perform() async throws -> some IntentResult & ReturnsValue<String> {
-    let value = try await WorkoutShortcutBridge.run("skip")
+    let value = try await WorkoutShortcutBridge.run("skip", background: true)
     return .result(value: value)
   }
 }
@@ -107,14 +112,15 @@ struct SkipRestAction: AppIntent {
 @available(iOS 16.0, *)
 struct ExtendRestAction: AppIntent {
   static var title: LocalizedStringResource = "Satzpause verlängern"
-  static var openAppWhenRun: Bool = true
+  static var openAppWhenRun: Bool = false
 
   @Parameter(title: "Sekunden", default: 30)
   var seconds: Int
 
   @MainActor
   func perform() async throws -> some IntentResult & ReturnsValue<String> {
-    let value = try await WorkoutShortcutBridge.run("extend", arguments: ["seconds": seconds])
+    let value = try await WorkoutShortcutBridge.run("extend", arguments: ["seconds": seconds],
+                                                 background: true)
     return .result(value: value)
   }
 }
@@ -122,11 +128,11 @@ struct ExtendRestAction: AppIntent {
 @available(iOS 16.0, *)
 struct WorkoutStatusAction: AppIntent {
   static var title: LocalizedStringResource = "Workoutstatus abrufen"
-  static var openAppWhenRun: Bool = true
+  static var openAppWhenRun: Bool = false
 
   @MainActor
   func perform() async throws -> some IntentResult & ReturnsValue<String> {
-    let value = try await WorkoutShortcutBridge.run("status")
+    let value = try await WorkoutShortcutBridge.run("status", background: true)
     return .result(value: value)
   }
 }
@@ -163,6 +169,70 @@ struct OpenRoutinesAction: AppIntent {
   @MainActor
   func perform() async throws -> some IntentResult & ReturnsValue<String> {
     let value = try await WorkoutShortcutBridge.run("plans")
+    return .result(value: value)
+  }
+}
+
+// Further actions for automations in the Shortcuts app. Without Siri phrases:
+// AppShortcutsProvider takes at most 10, they appear under "Add Action".
+
+@available(iOS 16.0, *)
+struct RestEndAction: AppIntent {
+  static var title: LocalizedStringResource = "Pausenende abrufen"
+  static var openAppWhenRun: Bool = false
+
+  @MainActor
+  func perform() async throws -> some IntentResult & ReturnsValue<Date> {
+    let value = try await WorkoutShortcutBridge.run("restEnd", background: true)
+    guard let milliseconds = Double(value) else {
+      throw WorkoutActionError(message: "Kein Pausen-Countdown aktiv.")
+    }
+    return .result(value: Date(timeIntervalSince1970: milliseconds / 1000))
+  }
+}
+
+@available(iOS 16.0, *)
+struct RestRemainingAction: AppIntent {
+  static var title: LocalizedStringResource = "Verbleibende Pause (Sekunden)"
+  static var openAppWhenRun: Bool = false
+
+  @MainActor
+  func perform() async throws -> some IntentResult & ReturnsValue<Int> {
+    let value = try await WorkoutShortcutBridge.run("restRemaining", background: true)
+    return .result(value: Int(value) ?? 0)
+  }
+}
+
+@available(iOS 16.0, *)
+struct LogSetWithValuesAction: AppIntent {
+  static var title: LocalizedStringResource = "Satz mit Werten speichern"
+  static var openAppWhenRun: Bool = false
+
+  @Parameter(title: "Wiederholungen (leer = geplant)")
+  var repetitions: Double?
+
+  @Parameter(title: "Gewicht (leer = geplant)")
+  var weight: Double?
+
+  @MainActor
+  func perform() async throws -> some IntentResult & ReturnsValue<String> {
+    var arguments: [String: Any] = [:]
+    if let repetitions = repetitions { arguments["repetitions"] = repetitions }
+    if let weight = weight { arguments["weight"] = weight }
+    let value = try await WorkoutShortcutBridge.run("logValues", arguments: arguments,
+                                                    background: true)
+    return .result(value: value)
+  }
+}
+
+@available(iOS 16.0, *)
+struct NextSetAction: AppIntent {
+  static var title: LocalizedStringResource = "Nächsten Satz abrufen"
+  static var openAppWhenRun: Bool = false
+
+  @MainActor
+  func perform() async throws -> some IntentResult & ReturnsValue<String> {
+    let value = try await WorkoutShortcutBridge.run("next", background: true)
     return .result(value: value)
   }
 }
