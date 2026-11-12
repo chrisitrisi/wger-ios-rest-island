@@ -40,7 +40,10 @@ Map<String, Object?>? workoutActivityContent(
   required DateTime now,
 }) {
   final controls = target.controls;
-  final page = state.pages.firstWhereOrNull((p) => p.pageIndex == state.currentPage);
+  // Set pages are found by their slot pages, start, session and summary directly
+  final page =
+      state.getPageByIndex() ??
+      state.pages.firstWhereOrNull((p) => p.pageIndex == state.currentPage);
   if (!state.isInitialized || controls == null || page == null || page.type == PageType.start) {
     return null;
   }
