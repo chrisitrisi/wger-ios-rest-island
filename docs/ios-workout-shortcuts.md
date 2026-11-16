@@ -58,3 +58,31 @@ Sobald du im Trainingsmodus das Workout startest, zeigt wger eine Live Activity 
 - **Buttons (ab iOS 17):** Satz speichern, Pause überspringen und +30 s, wie in der Benachrichtigung.
 
 iOS erlaubt das Starten einer Live Activity nur, solange wger im Vordergrund ist. Aktualisieren klappt auch im Hintergrund, z. B. nach einem Kurzbefehl. Live Activities lassen sich unter **Einstellungen → wger** ein- und ausschalten.
+
+## Laufen und Sauna mit NOOP
+
+NOOP (Branch `feature/zone-training` im noop-Fork) zeichnet Lauf und Sauna mit dem Puls des Whoop auf und schreibt sie nach Apple Health. wger übernimmt daraus bei jedem Health-Sync die **Minuten pro Tag** in zwei eigene Messwert-Kategorien:
+
+| Workout in Apple Health | Kategorie in wger |
+| --- | --- |
+| Laufen, Laufband | Die erste eigene Kategorie, deren Name mit „Laufen“, „Jogging“ oder „Running“ beginnt. Fehlt sie, legt wger „Laufen“ (min) an. |
+| Achtsamkeit & Körper (so schreibt NOOP die Sauna) | Die erste eigene Kategorie, deren Name mit „Sauna“ beginnt, z. B. „Sauna (min)“. Fehlt sie, legt wger „Sauna“ (min) an. |
+
+Gelesen werden jeweils die letzten 30 Tage. Läuft dieselbe Einheit doppelt in Health (zwei Apps), zählt sie einmal. Ein Workout zählt zu dem Tag, an dem es begonnen hat. Von Hand eingetragene Werte am selben Tag bleiben daneben stehen.
+
+War der Health-Sync schon vor diesem Update an, fehlt noch die Erlaubnis für Workouts: unter **Einstellungen → Apple Health** den Sync einmal aus- und wieder einschalten und **Workouts** erlauben.
+
+### NOOP-Aktionen
+
+| Aktion | Ergebnis |
+| --- | --- |
+| Start Workout | Sportart (Laufen, Gehen, Rad, Laufband, Kraft, Sauna, Sonstiges), optional **Zielzone** und **Aufwärmen (Minuten)**. Mit Zielzone vibriert das Band, wenn der Puls rund 25 Sekunden darunter bleibt (zwei kurze Impulse) oder darüber (drei lange), danach frühestens wieder nach 50 Sekunden. In der Aufwärmzeit bleibt es still. |
+| End Workout | Beendet und speichert das NOOP-Workout, ohne NOOP zu öffnen. |
+
+### Beispiel: Oberkörper, Lauf in Zone 2, Sauna
+
+1. **Workout mit NOOP starten** (wger) und **Start Workout** (NOOP): Kraft, keine Zielzone.
+2. Nach dem letzten Satz: **Workout beenden und speichern** (wger), **End Workout** (NOOP), dann **Start Workout** (NOOP): Laufen, Zone 2, Aufwärmen 5 Minuten.
+3. Nach dem Lauf: **End Workout** und **Start Workout** (NOOP): Sauna. Nach der Sauna **End Workout**.
+
+Schritt 2 und 3 je als eigenen Kurzbefehl auf die Aktionstaste legen.

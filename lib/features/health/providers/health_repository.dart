@@ -25,6 +25,7 @@ import 'package:health_bridge/health.dart';
 import 'package:logging/logging.dart';
 import 'package:wger/features/health/models/health_metric.dart';
 import 'package:wger/features/health/models/health_reading.dart';
+import 'package:wger/features/health/models/health_workout.dart';
 
 final healthRepositoryProvider = Provider<HealthRepository>((ref) {
   return HealthRepository();
@@ -326,6 +327,20 @@ class HealthRepository {
     if (firstError != null && failed.length == types.length) {
       throw firstError;
     }
+  }
+
+  /// The workouts that started between [start] and [end].
+  ///
+  /// Workouts are few (a handful a week), so one query covers the range. Throws
+  /// like a single-type [read] when the platform refuses the read.
+  Future<List<HealthWorkout>> readWorkouts(DateTime start, DateTime end) async {
+    await _health.configure();
+    final points = await _health.getHealthDataFromTypes(
+      types: [HealthDataType.WORKOUT],
+      startTime: start,
+      endTime: end,
+    );
+    return _health.removeDuplicates(points).map(HealthWorkout.fromDataPoint).nonNulls.toList();
   }
 
   static String _dedupKey(HealthReading reading) =>

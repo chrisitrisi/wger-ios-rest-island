@@ -18,6 +18,7 @@
 
 import 'package:flutter/widgets.dart' show AppLifecycleListener;
 import 'package:freezed_annotation/freezed_annotation.dart';
+import 'package:health_bridge/health.dart';
 import 'package:logging/logging.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:wger/core/network/auth_credentials_storage.dart';
@@ -25,6 +26,7 @@ import 'package:wger/core/shared_preferences.dart';
 import 'package:wger/features/health/models/health_metric.dart';
 import 'package:wger/features/health/providers/health_importer.dart';
 import 'package:wger/features/health/providers/health_repository.dart';
+import 'package:wger/features/health/providers/health_workout_importer.dart';
 import 'package:wger/features/measurements/providers/measurement_repository.dart';
 
 /// The importer's outcome is part of what this notifier exposes, so it reads
@@ -61,12 +63,17 @@ sealed class HealthSyncState with _$HealthSyncState {
 /// on. Everything about how readings become measurements lives there.
 @Riverpod(keepAlive: true)
 class HealthSyncNotifier extends _$HealthSyncNotifier {
+  /// What the permission dialog asks for: the metrics, and the workouts the
+  /// running and sauna minutes come from.
+  static final _requestedTypes = [...healthDataTypes, HealthDataType.WORKOUT];
+
   /// Minimum pause between the automatic syncs, on app start and on resume.
   static const _autoSyncThrottle = Duration(minutes: 15);
 
   final _logger = Logger('HealthSyncNotifier');
   late final HealthRepository _health;
   late final HealthImporter _importer;
+  late final HealthWorkoutImporter _workoutImporter;
 
   /// Percent the state was last updated for, see [_onProgress].
   int? _reportedPercent;
@@ -87,6 +94,11 @@ class HealthSyncNotifier extends _$HealthSyncNotifier {
       prefs: PreferenceHelper.instance,
       credentials: ref.read(authCredentialsStorageProvider),
       onProgress: _onProgress,
+    );
+    _workoutImporter = HealthWorkoutImporter(
+      health: _health,
+      measurements: ref.read(measurementRepositoryProvider),
+      credentials: ref.read(authCredentialsStorageProvider),
     );
     _loadPersistedState();
 
@@ -118,7 +130,7 @@ class HealthSyncNotifier extends _$HealthSyncNotifier {
   /// permissions were not granted (sync stays disabled).
   Future<int?> enableSync() async {
     _logger.info('Enabling health sync');
-    if (!await _health.ensureAuthorized(healthDataTypes)) {
+    if (!await _health.ensureAuthorized(_requestedTypes)) {
       return null;
     }
     await PreferenceHelper.instance.setHealthSyncEnabled(true);
@@ -134,7 +146,7 @@ class HealthSyncNotifier extends _$HealthSyncNotifier {
   /// not granted.
   Future<int?> retryWithPermissions() async {
     _logger.info('Re-requesting health permissions');
-    if (!await _health.ensureAuthorized(healthDataTypes)) {
+    if (!await _health.ensureAuthorized(_requestedTypes)) {
       state = state.copyWith(issue: HealthSyncIssue.permissionsMissing);
       return null;
     }
@@ -186,6 +198,21 @@ class HealthSyncNotifier extends _$HealthSyncNotifier {
     state = state.copyWith(progress: progress);
   }
 
+  /// Imports the running and sauna minutes, see [HealthWorkoutImporter].
+  ///
+  /// Kept apart from the metric import's outcome: an installation that has not
+  /// granted workout access yet (sync switched on before workouts were asked
+  /// for) still imports every metric, and gets the workouts once the
+  /// permissions are asked for again.
+  Future<int> _importWorkouts() async {
+    try {
+      return await _workoutImporter.run();
+    } catch (e) {
+      _logger.warning('Importing workouts failed: $e');
+      return 0;
+    }
+  }
+
   /// Runs one import and reports it in the state. Returns the number of
   /// imported entries. A no-op unless the user enabled sync, and while one is
   /// already running. Triggered on app open, on app resume, and manually from
@@ -203,6 +230,7 @@ class HealthSyncNotifier extends _$HealthSyncNotifier {
       state = state.copyWith(isEnabled: true, isSyncing: true, issue: null, progress: null);
 
       final result = await _importer.run();
+      final workoutEntries = await _importWorkouts();
 
       // The timestamp says when the metrics were last read, so a run that gave
       // up before reading any of them leaves the previous one standing
@@ -211,7 +239,7 @@ class HealthSyncNotifier extends _$HealthSyncNotifier {
       }
       state = state.copyWith(
         isSyncing: false,
-        lastSyncCount: result.imported,
+        lastSyncCount: result.imported + workoutEntries,
         lastSyncTime: result.completed ? DateTime.now() : state.lastSyncTime,
         issue: result.issue,
         progress: null,
