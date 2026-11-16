@@ -91,4 +91,21 @@ void main() {
       (title: 'Pause', body: 'Next: Bench press'),
     );
   });
+
+  test('a wger://workout link stands for the shortcut action it names', () {
+    final start = shortcutLinkCall(Uri.parse('wger://workout/start?day=Mo%20Unterkoerper%20A'))!;
+    expect(start.method, 'start');
+    expect(start.arguments, {'day': 'Mo Unterkoerper A'});
+
+    final finish = shortcutLinkCall(Uri.parse('wger://workout/savefinish'))!;
+    expect(finish.method, 'saveFinish', reason: 'the action name is matched ignoring case');
+    expect(finish.arguments, {'day': ''});
+  });
+
+  test('other links are not shortcut calls', () {
+    expect(shortcutLinkCall(Uri.parse('wger://app-auth#token=x')), isNull);
+    expect(shortcutLinkCall(Uri.parse('wger://workout/logValues')), isNull);
+    expect(shortcutLinkCall(Uri.parse('wger://workout/start/now')), isNull);
+    expect(shortcutLinkCall(Uri.parse('noop://workout/start')), isNull);
+  });
 }

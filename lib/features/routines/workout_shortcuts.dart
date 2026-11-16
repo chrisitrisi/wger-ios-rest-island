@@ -19,12 +19,14 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:app_links/app_links.dart';
 import 'package:clock/clock.dart';
 import 'package:collection/collection.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:logging/logging.dart';
 import 'package:wger/core/date.dart';
 import 'package:wger/core/keys.dart';
 import 'package:wger/core/network/auth_notifier.dart';
@@ -51,6 +53,27 @@ Never _fail(String message) => throw PlatformException(code: 'workout', message:
 /// keeps wger in the background, where no frames are drawn and
 /// `endOfFrame` would never complete.
 const SHORTCUT_NAVIGATION_METHODS = {'start', 'finish', 'plans'};
+
+/// The actions a `wger://workout/<action>` link may run, e.g.
+/// `wger://workout/start?day=Mo%20Unterkoerper%20A` or `wger://workout/saveFinish`.
+///
+/// Links are what ready-made shortcut files use: a sideloaded build carries a
+/// bundle id rewritten per signing team, and a shortcut bound to the app
+/// actions of the original id finds no app, while "Open URL" always does.
+const SHORTCUT_LINK_METHODS = ['start', 'finish', 'saveFinish', 'log', 'skip', 'plans'];
+
+/// The shortcut call a `wger://workout/...` link stands for, null for any
+/// other link.
+MethodCall? shortcutLinkCall(Uri uri) {
+  if (uri.scheme.toLowerCase() != 'wger' ||
+      uri.host.toLowerCase() != 'workout' ||
+      uri.pathSegments.length != 1) {
+    return null;
+  }
+  final action = uri.pathSegments.single.toLowerCase();
+  final method = SHORTCUT_LINK_METHODS.firstWhereOrNull((m) => m.toLowerCase() == action);
+  return method == null ? null : MethodCall(method, {'day': uri.queryParameters['day'] ?? ''});
+}
 
 /// The set that is up next as the notifications describe it: during a rest
 /// countdown the set after it, else the current page. Null without a workout.
@@ -93,7 +116,7 @@ final workoutShortcutsProvider = Provider<void>((ref) {
     return;
   }
   var busy = false;
-  _channel.setMethodCallHandler((call) async {
+  Future<String> handle(MethodCall call) async {
     if (busy) {
       _fail('Eine wger-Aktion läuft bereits. Versuche es danach erneut.');
     }
@@ -110,16 +133,52 @@ final workoutShortcutsProvider = Provider<void>((ref) {
     } on PlatformException {
       rethrow;
     } catch (_) {
-      _fail('Die Aktion ist fehlgeschlagen. Prüfe in wger deinen Trainingsplan und die Verbindung.');
+      _fail(
+        'Die Aktion ist fehlgeschlagen. Prüfe in wger deinen Trainingsplan und die Verbindung.',
+      );
     } finally {
       busy = false;
     }
-  });
-  unawaited(_channel.invokeMethod<void>('ready').catchError((Object e) {
-    if (e is! MissingPluginException) {
-      throw e;
+  }
+
+  _channel.setMethodCallHandler(handle);
+
+  // The same actions from wger://workout links. A cold start delivers the
+  // link both as the initial link and on the stream, so a repeat of the same
+  // link within a few seconds is dropped
+  final logger = Logger('WorkoutShortcuts');
+  Uri? lastLink;
+  DateTime? lastLinkAt;
+  Future<void> onLink(Uri uri) async {
+    final call = shortcutLinkCall(uri);
+    if (call == null) {
+      return;
     }
-  }));
+    final now = clock.now();
+    if (uri == lastLink && lastLinkAt != null && now.difference(lastLinkAt!).inSeconds < 5) {
+      return;
+    }
+    lastLink = uri;
+    lastLinkAt = now;
+    try {
+      logger.info('Running ${call.method} from a workout link');
+      await handle(call);
+    } on PlatformException catch (e) {
+      logger.warning('Workout link ${call.method} failed: ${e.message}');
+    }
+  }
+
+  final appLinks = AppLinks();
+  final linkSub = appLinks.uriLinkStream.listen(onLink);
+  unawaited(appLinks.getInitialLink().then((uri) => uri == null ? null : onLink(uri)));
+  ref.onDispose(linkSub.cancel);
+  unawaited(
+    _channel.invokeMethod<void>('ready').catchError((Object e) {
+      if (e is! MissingPluginException) {
+        throw e;
+      }
+    }),
+  );
   ref.onDispose(() => _channel.setMethodCallHandler(null));
 });
 
@@ -167,12 +226,16 @@ Future<String> _perform(Ref ref, MethodCall call) async {
       _fail('Kein passender Trainingsplan verfügbar.');
     }
     if (!routine.isHydrated) {
-      routine = await ref.read(routinesRiverpodProvider.notifier).fetchAndSetRoutineFull(routine.id!);
+      routine = await ref
+          .read(routinesRiverpodProvider.notifier)
+          .fetchAndSetRoutineFull(routine.id!);
     }
     final previous = saved;
     final day = previous == null
         ? shortcutDay(routine.dayDataCurrentIterationGym, name, now)
-        : routine.dayDataGym.firstWhereOrNull((d) => d.day?.id == previous.dayId && d.iteration == previous.iteration);
+        : routine.dayDataGym.firstWhereOrNull(
+            (d) => d.day?.id == previous.dayId && d.iteration == previous.iteration,
+          );
     if (day == null) {
       if (saved != null) {
         _fail('Öffne den zuletzt verwendeten Trainingstag in wger.');
@@ -191,7 +254,8 @@ Future<String> _perform(Ref ref, MethodCall call) async {
   }
 
   if (call.method == 'start') {
-    if (name.trim().isNotEmpty && state.dayDataGym.day!.name.trim().toLowerCase() != name.trim().toLowerCase()) {
+    if (name.trim().isNotEmpty &&
+        state.dayDataGym.day!.name.trim().toLowerCase() != name.trim().toLowerCase()) {
       _fail('Ein anderer Trainingstag ist bereits geöffnet.');
     }
     if (state.currentPage == 0) {
@@ -204,21 +268,35 @@ Future<String> _perform(Ref ref, MethodCall call) async {
 
   final page = state.getSlotEntryPageByIndex();
   final restEndsAt = state.restEndsAt;
-  WorkoutNotificationTarget describe() => ref.read(workoutNotificationControllerProvider).describe();
+  WorkoutNotificationTarget describe() =>
+      ref.read(workoutNotificationControllerProvider).describe();
   switch (call.method) {
     case 'start':
     case 'finish':
       if (call.method == 'finish') {
-        notifier.setCurrentPage(state.pages.firstWhere((p) => p.type == PageType.session).pageIndex);
+        notifier.setCurrentPage(
+          state.pages.firstWhere((p) => p.type == PageType.session).pageIndex,
+        );
       }
       if (ref.read(gymModeVisibleProvider)) {
         nav!.popUntil((route) => route.settings.name == GymModeScreen.routeName || route.isFirst);
       } else {
-        unawaited(nav!.pushNamed<void>(GymModeScreen.routeName,
-          arguments: GymModeArguments(state.routine.id!, state.dayId, state.iteration, alreadyOpened: true)));
+        unawaited(
+          nav!.pushNamed<void>(
+            GymModeScreen.routeName,
+            arguments: GymModeArguments(
+              state.routine.id!,
+              state.dayId,
+              state.iteration,
+              alreadyOpened: true,
+            ),
+          ),
+        );
         await WidgetsBinding.instance.endOfFrame;
       }
-      return call.method == 'finish' ? 'Abschluss geöffnet. Tippe zum Abschließen auf Speichern.' : state.dayDataGym.day!.name;
+      return call.method == 'finish'
+          ? 'Abschluss geöffnet. Tippe zum Abschließen auf Speichern.'
+          : state.dayDataGym.day!.name;
     case 'saveFinish':
       final entries = state.progress.values.where((p) => p.done).map((p) => p.loggedEntry);
       final ids = entries.map((entry) => entry?.sessionId).toSet();
@@ -226,13 +304,15 @@ Future<String> _perform(Ref ref, MethodCall call) async {
         _fail('Prüfe die zugeordneten Sätze unter „Workoutabschluss öffnen“.');
       }
       await ref.read(workoutSessionProvider.future);
-      final saved = await ref.read(workoutSessionProvider.notifier).finishGymSession(
-        routineId: state.routine.id!,
-        dayId: state.dayId,
-        start: state.workoutStart,
-        end: now,
-        sessionId: ids.firstOrNull,
-      );
+      final saved = await ref
+          .read(workoutSessionProvider.notifier)
+          .finishGymSession(
+            routineId: state.routine.id!,
+            dayId: state.dayId,
+            start: state.workoutStart,
+            end: now,
+            sessionId: ids.firstOrNull,
+          );
       if (!saved) {
         _fail('Prüfe die Sitzung unter „Workoutabschluss öffnen“.');
       }
