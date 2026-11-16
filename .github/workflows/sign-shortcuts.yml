@@ -1,0 +1,53 @@
+name: Sign training shortcuts
+
+# Builds the .shortcut files from shortcuts/build_shortcuts.py, signs them with
+# Apple's `shortcuts sign` (macOS only) so any iPhone can import them, and
+# attaches them to a release.
+on:
+  push:
+    branches: [claude/wizardly-goodall-ulb5n6]
+    paths:
+      - shortcuts/**
+      - .github/workflows/sign-shortcuts.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  sign:
+    runs-on: macos-15
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
+      - name: Build unsigned shortcuts
+        run: python3 shortcuts/build_shortcuts.py unsigned
+      - name: Sign for anyone
+        run: |
+          set -euo pipefail
+          mkdir -p signed
+          for f in unsigned/*.shortcut; do
+            name=$(basename "$f")
+            shortcuts sign --mode anyone --input "$f" --output "signed/$name"
+            test -s "signed/$name"
+          done
+          ls -l signed
+      - uses: actions/upload-artifact@v7
+        with:
+          name: wger-noop-shortcuts
+          path: signed/*.shortcut
+      - name: Publish as a release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          tag="kurzbefehle-${GITHUB_SHA:0:8}"
+          notes="Signierte Kurzbefehle für wger + NOOP. Auf dem iPhone in Safari laden und in Kurzbefehle hinzufügen. Braucht die wger-IPA ab diesem Branch und NOOP ab feature/wear-streak."
+          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$tag" signed/*.shortcut --clobber --repo "$GITHUB_REPOSITORY"
+          else
+            gh release create "$tag" signed/*.shortcut --repo "$GITHUB_REPOSITORY" \
+              --target "$GITHUB_SHA" --prerelease --latest=false \
+              --title "Kurzbefehle · Training, Lauf Zone 2, Sauna" --notes "$notes"
+          fi
