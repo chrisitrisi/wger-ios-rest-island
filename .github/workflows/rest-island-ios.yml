@@ -1,7 +1,7 @@
 name: Build wger with Rest Island
 on:
   push:
-    branches: [dynamic-island, feature/ios-workout-shortcuts, feature/ios-island-shortcuts]
+    branches: [dynamic-island, feature/ios-workout-shortcuts, feature/ios-island-shortcuts, claude/wizardly-goodall-ulb5n6]
   workflow_dispatch:
 permissions:
   contents: read
@@ -108,7 +108,13 @@ jobs:
           path: dist/wger-RestIsland-Shortcuts.ipa
 
   download:
-    if: github.ref == 'refs/heads/feature/ios-workout-shortcuts' || github.ref == 'refs/heads/feature/ios-island-shortcuts'
+    # Every shortcuts build gets a downloadable IPA under Releases: pushes to the shortcut branches and
+    # any manual run (Actions -> Run workflow, on whichever branch)
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      github.ref == 'refs/heads/feature/ios-workout-shortcuts' ||
+      github.ref == 'refs/heads/feature/ios-island-shortcuts' ||
+      github.ref == 'refs/heads/claude/wizardly-goodall-ulb5n6'
     needs: [build, verify]
     runs-on: ubuntu-latest
     permissions:
