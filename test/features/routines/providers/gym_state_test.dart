@@ -40,6 +40,7 @@ import 'package:wger/features/routines/models/page_progress.dart';
 import 'package:wger/features/routines/models/routine.dart';
 import 'package:wger/features/routines/models/set_config_data.dart';
 import 'package:wger/features/routines/models/slot_data.dart';
+import 'package:wger/features/routines/models/slot_entry.dart';
 import 'package:wger/features/routines/providers/gym_log_notifier.dart';
 import 'package:wger/features/routines/providers/gym_state.dart';
 import 'package:wger/features/routines/providers/gym_state_notifier.dart';
@@ -540,6 +541,147 @@ void main() {
         'log:2:2',
         'timer:2:2',
       ]);
+    });
+  });
+
+  group('GymStateNotifier.calculatePages, sets of one exercise in several slots', () {
+    // A warm-up set is its own slot entry. Put in front of the working sets as
+    // a slot of its own, it must not turn into a separate exercise page.
+
+    SetConfigData setOf(Exercise exercise, int slotEntryId, {SlotEntryType? type}) => SetConfigData(
+      exerciseId: exercise.id,
+      exercise: exercise,
+      slotEntryId: slotEntryId,
+      type: type ?? SlotEntryType.normal,
+      nrOfSets: 1,
+      repetitions: 8,
+      repetitionsUnit: testRepetitionUnits.first,
+      weight: 40,
+      weightUnit: testWeightUnits.first,
+      restTime: 60,
+      textRepr: '8x40kg',
+    );
+
+    SlotData slotOf(List<SetConfigData> sets, {bool isSuperset = false}) => SlotData(
+      isSuperset: isSuperset,
+      exerciseIds: sets.map((c) => c.exerciseId).toSet().toList(),
+      setConfigs: sets,
+    );
+
+    void calculateFor(
+      List<SlotData> slots, {
+      bool showExercisePages = true,
+      GymStateNotifier? gymNotifier,
+    }) {
+      final target = gymNotifier ?? notifier;
+      target.state = target.state.copyWith(
+        showExercisePages: showExercisePages,
+        showTimerPages: false,
+        dayId: 1,
+        iteration: 1,
+        routine: getTestRoutine()
+          ..dayDataGym = [
+            DayData(
+              iteration: 1,
+              date: DateTime(2026, 11, 16),
+              day: Day(id: 1, routineId: 1, name: 'Unterkoerper A'),
+              slots: slots,
+            ),
+          ],
+      );
+      target.calculatePages();
+    }
+
+    test('puts a warm-up slot and the working sets of the exercise on one page', () {
+      final exercises = getTestExercises();
+      final bench = exercises[0];
+      final crunches = exercises[1];
+
+      calculateFor([
+        slotOf([setOf(bench, 10, type: SlotEntryType.warmup)]),
+        slotOf([setOf(bench, 11), setOf(bench, 11)]),
+        slotOf([setOf(crunches, 12)]),
+      ]);
+
+      final setPages = notifier.state.pages.where((p) => p.type == PageType.set).toList();
+      expect(setPages, hasLength(2), reason: 'one page per exercise');
+
+      final benchPage = setPages.first;
+      expect(benchPage.key, 'slot:10:1', reason: 'the page keeps the key of its first slot');
+      expect(benchPage.slotPages.map((p) => p.type), [
+        SlotPageType.exerciseOverview,
+        SlotPageType.log,
+        SlotPageType.log,
+        SlotPageType.log,
+      ]);
+      final logs = benchPage.slotPages.where((p) => p.type == SlotPageType.log).toList();
+      expect(logs.map((p) => p.setIndex), [0, 1, 2], reason: 'counted as sets 1 to 3 of 3');
+      expect(logs.map((p) => p.key), ['log:10:1', 'log:11:1', 'log:11:2']);
+      expect(logs.first.setConfigData!.type, SlotEntryType.warmup);
+
+      expect(setPages[1].slotPages.map((p) => p.setIndex), [0, 0]);
+      expect(
+        notifier.state.pages.map((p) => p.pageIndex),
+        [0, 1, 5, 7, 8],
+        reason: 'page indices stay consecutive',
+      );
+    });
+
+    test('keeps slots of different exercises and supersets on their own pages', () {
+      final exercises = getTestExercises();
+      final bench = exercises[0];
+      final crunches = exercises[1];
+
+      calculateFor([
+        slotOf([setOf(bench, 10)]),
+        slotOf([setOf(bench, 11), setOf(crunches, 12)], isSuperset: true),
+        slotOf([setOf(bench, 13)]),
+        slotOf([setOf(crunches, 14)]),
+      ], showExercisePages: false);
+
+      expect(
+        notifier.state.pages.where((p) => p.type == PageType.set).map((p) => p.key),
+        ['slot:10:1', 'slot:11:1', 'slot:13:1', 'slot:14:1'],
+      );
+    });
+
+    test('an exercise added after the group follows the whole group', () async {
+      // Adding an exercise reads the profile's weight unit, so the providers
+      // behind it must not touch the database
+      final profileRepo = MockUserProfileRepository();
+      when(
+        profileRepo.watchDrift(),
+      ).thenAnswer((_) => Stream.value(UserProfile(id: 1, weightUnitStr: 'kg')));
+      final addContainer = ProviderContainer.test(
+        overrides: [
+          userProfileRepositoryProvider.overrideWithValue(profileRepo),
+          routineWeightUnitProvider.overrideWith((ref) => Stream.value(testWeightUnits)),
+        ],
+      );
+      addContainer.listen(userProfileProvider, (_, _) {});
+      addContainer.listen(routineWeightUnitProvider, (_, _) {});
+      await pumpEventQueue();
+      final gymNotifier = addContainer.read(gymStateProvider.notifier);
+
+      final exercises = getTestExercises();
+      final bench = exercises[0];
+      final crunches = exercises[1];
+      calculateFor(
+        [
+          slotOf([setOf(bench, 10, type: SlotEntryType.warmup)]),
+          slotOf([setOf(bench, 11)]),
+          slotOf([setOf(crunches, 12)]),
+        ],
+        showExercisePages: false,
+        gymNotifier: gymNotifier,
+      );
+
+      gymNotifier.addExerciseAfterPage('slot:10:1', newExercise: exercises[2]);
+
+      expect(
+        gymNotifier.state.pages.where((p) => p.type == PageType.set).map((p) => p.key),
+        ['slot:10:1', 'added:1', 'slot:12:1'],
+      );
     });
   });
 
