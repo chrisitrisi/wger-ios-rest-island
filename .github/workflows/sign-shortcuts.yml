@@ -16,7 +16,9 @@ permissions:
 
 jobs:
   sign:
-    runs-on: macos-15
+    # The pool the IPA build uses; macos-15 sat in the queue until it was cancelled
+    runs-on: macos-26-intel
+    timeout-minutes: 20
     permissions:
       contents: write
     steps:
@@ -29,7 +31,10 @@ jobs:
           mkdir -p signed
           for f in unsigned/*.shortcut; do
             name=$(basename "$f")
-            shortcuts sign --mode anyone --input "$f" --output "signed/$name"
+            # Bounded: without a usable signing identity the tool can wait forever
+            perl -e 'alarm shift; exec @ARGV' 120 \
+              shortcuts sign --mode anyone --input "$f" --output "signed/$name" \
+              || { echo "::error::shortcuts sign failed or timed out for $name"; exit 1; }
             test -s "signed/$name"
           done
           ls -l signed
