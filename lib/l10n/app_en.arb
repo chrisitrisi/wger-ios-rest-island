@@ -2038,5 +2038,48 @@
       "min": { "type": "int" },
       "max": { "type": "int" }
     }
+  },
+  "water": "Water",
+  "@water": {
+    "description": "Title of the dashboard card for the daily water intake"
+  },
+  "waterProgress": "{current} of {goal} L",
+  "@waterProgress": {
+    "description": "Liters drunk today against the daily goal, e.g. '1.2 of 3 L'",
+    "type": "text",
+    "placeholders": {
+      "current": {
+        "type": "String"
+      },
+      "goal": {
+        "type": "String"
+      }
+    }
+  },
+  "waterAdd": "+{amount} ml",
+  "@waterAdd": {
+    "description": "Button that logs a drink of this many milliliters",
+    "type": "text",
+    "placeholders": {
+      "amount": {
+        "type": "int"
+      }
+    }
+  },
+  "waterGoal": "Daily water goal",
+  "@waterGoal": {
+    "description": "Label of the field and button for the daily water goal"
+  },
+  "waterGoalReached": "Goal reached",
+  "@waterGoalReached": {
+    "description": "Shown on the water card once today's goal is reached"
+  },
+  "waterNotSupported": "Logging water needs Apple Health or Health Connect",
+  "@waterNotSupported": {
+    "description": "Shown on the water card on devices without a health platform"
+  },
+  "waterPermissionDenied": "Allow wger to read and write water in Apple Health or Health Connect to log drinks",
+  "@waterPermissionDenied": {
+    "description": "Snackbar when the user did not grant access to water data"
   }
 }

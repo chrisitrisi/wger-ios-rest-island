@@ -40,6 +40,8 @@ class SettingsDashboardVisibility extends ConsumerWidget {
           return i18n.calendar;
         case DashboardWidget.nutrition:
           return i18n.nutritionalPlans;
+        case DashboardWidget.water:
+          return i18n.water;
         case DashboardWidget.trophies:
           return i18n.trophies;
       }

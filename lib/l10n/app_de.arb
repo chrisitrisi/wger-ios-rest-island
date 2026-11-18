@@ -1196,5 +1196,12 @@
     "workoutNotificationChannel": "Training",
     "gymModeStickySetValues": "Werte des letzten Satzes übernehmen",
     "gymModeStickySetValuesHelp": "Den nächsten Satz einer Übung mit den Werten vorbelegen, die du zuletzt dafür eingetragen hast",
-    "upNext": "Als Nächstes"
+    "upNext": "Als Nächstes",
+    "water": "Wasser",
+    "waterProgress": "{current} von {goal} L",
+    "waterAdd": "+{amount} ml",
+    "waterGoal": "Tagesziel Wasser",
+    "waterGoalReached": "Ziel erreicht",
+    "waterNotSupported": "Zum Erfassen von Wasser wird Apple Health oder Health Connect benötigt",
+    "waterPermissionDenied": "Erlaube wger, Wasser in Apple Health oder Health Connect zu lesen und zu schreiben, um Getränke zu erfassen"
 }

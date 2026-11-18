@@ -69,6 +69,10 @@ const SUBMIT_BUTTON_KEY_NAME = 'submit-button';
 const PREFS_INGREDIENTS = 'ingredientData';
 const PREFS_WORKOUT_UNITS = 'workoutUnits';
 
+/// Daily water goal in liters, local to this device (the server has no
+/// water model). The drinks themselves live in Apple Health / Health Connect.
+const PREFS_WATER_GOAL_LITERS = 'waterGoalLiters';
+
 /// Pre-JWT credential blob. Only still read to delete it on startup.
 const PREFS_USER = 'userData';
 const PREFS_USER_DARK_THEME = 'userDarkMode';

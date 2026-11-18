@@ -95,7 +95,7 @@
 		     (requestAuthorization(toShare:read:), save, delete), so App Store validation
 		     rejects the upload without this key (ITMS-90683). -->
 		<key>NSHealthUpdateUsageDescription</key>
-		<string>wger does not save any data to Apple Health; the health integration only reads measurements and activity such as weight, body fat, heart rate and sleep</string>
+		<string>wger saves the drinks you log on the water card to Apple Health. Nothing else is written; measurements and activity are only read</string>
 		<key>UIApplicationSceneManifest</key>
 		<dict>
 			<key>UIApplicationSupportsMultipleScenes</key>
