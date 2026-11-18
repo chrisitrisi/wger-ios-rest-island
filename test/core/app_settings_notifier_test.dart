@@ -54,6 +54,7 @@ void main() {
           DashboardWidget.trophies,
           DashboardWidget.routines,
           DashboardWidget.nutrition,
+          DashboardWidget.water,
           DashboardWidget.weight,
           DashboardWidget.measurements,
           DashboardWidget.calendar,
@@ -119,16 +120,18 @@ void main() {
       final items = settings.dashboardItems;
 
       // Loaded: [nutrition, routines], then defaults insert around:
-      // trophies (0) → 0, weight (3), measurements (4), calendar (5)
+      // trophies (0) → 0, water (3), weight (4), measurements (5), calendar (6)
       expect(items.allWidgets[0], DashboardWidget.trophies);
       expect(items.allWidgets[1], DashboardWidget.nutrition);
       expect(items.allWidgets[2], DashboardWidget.routines);
-      expect(items.allWidgets[3], DashboardWidget.weight);
+      expect(items.allWidgets[3], DashboardWidget.water);
+      expect(items.allWidgets[4], DashboardWidget.weight);
 
       expect(items.isWidgetVisible(DashboardWidget.nutrition), true);
       expect(items.isWidgetVisible(DashboardWidget.routines), false);
 
-      // Missing items default to visible
+      // Missing items default to visible, including a newly added widget
+      expect(items.isWidgetVisible(DashboardWidget.water), true);
       expect(items.isWidgetVisible(DashboardWidget.weight), true);
       expect(items.isWidgetVisible(DashboardWidget.trophies), true);
     });
