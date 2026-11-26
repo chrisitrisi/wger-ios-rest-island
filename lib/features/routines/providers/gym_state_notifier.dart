@@ -183,7 +183,7 @@ class GymStateNotifier extends _$GymStateNotifier {
 
     await PreferenceHelper.asyncPref.setString(
       PREFS_WORKOUT_PROGRESS,
-      json.encode(progress.toJson()),
+      json.encode({...progress.toJson(), 'routineId': state.routine.id}),
     );
     _logger.finer('Saved $progress');
   }
@@ -327,18 +327,62 @@ class GymStateNotifier extends _$GymStateNotifier {
     }
 
     pageIndex++;
-    for (final (slotIndex, slotData) in state.dayDataGym.slots.indexed) {
-      final slotPageIndex = pageIndex;
-      final slotEntries = <SlotPageEntry>[];
-      int setIndex = 0;
 
+    // Consecutive slots that each hold the same single exercise are the sets
+    // of one exercise, e.g. a warm-up entry followed by the working sets. The
+    // routine editor lists them as "Set 1", "Set 2", so they share one page
+    // here too instead of starting the exercise over. The page keeps the key
+    // of its first slot.
+    var slotPageIndex = pageIndex;
+    var slotEntries = <SlotPageEntry>[];
+    var slotKey = '';
+    var groupSlotKeys = <String>[];
+    int? groupExerciseId;
+    var setIndex = 0;
+
+    void closeGroup() {
+      if (groupSlotKeys.isEmpty) {
+        return;
+      }
+      pages.add(
+        PageEntry(
+          type: PageType.set,
+          pageIndex: slotPageIndex,
+          key: slotKey,
+          slotPages: slotEntries,
+        ),
+      );
+      groupSlotKeys.forEach(addAddedPages);
+      groupSlotKeys = [];
+      groupExerciseId = null;
+    }
+
+    for (final (slotIndex, slotData) in state.dayDataGym.slots.indexed) {
       final firstConfig = slotData.setConfigs.firstOrNull;
-      final slotKey = firstConfig == null
+      final key = firstConfig == null
           ? 'slot:empty$slotIndex'
           : 'slot:${nextSet(firstConfig.slotEntryId)}';
 
+      final singleExerciseId = !slotData.isSuperset && slotData.exerciseIds.length == 1
+          ? slotData.exerciseIds.single
+          : null;
+      final continuesGroup =
+          singleExerciseId != null && firstConfig != null && singleExerciseId == groupExerciseId;
+
+      if (continuesGroup) {
+        groupSlotKeys.add(key);
+      } else {
+        closeGroup();
+        slotPageIndex = pageIndex;
+        slotEntries = <SlotPageEntry>[];
+        slotKey = key;
+        groupSlotKeys = [key];
+        groupExerciseId = firstConfig == null ? null : singleExerciseId;
+        setIndex = 0;
+      }
+
       // exercise overview page
-      if (state.showExercisePages) {
+      if (state.showExercisePages && !continuesGroup) {
         // Add one overview page per exercise in the slot (e.g. for supersets)
         for (final exerciseId in slotData.exerciseIds) {
           final setConfig = slotData.setConfigs.firstWhereOrNull((c) => c.exerciseId == exerciseId);
@@ -391,17 +435,8 @@ class GymStateNotifier extends _$GymStateNotifier {
           pageIndex++;
         }
       }
-
-      pages.add(
-        PageEntry(
-          type: PageType.set,
-          pageIndex: slotPageIndex,
-          key: slotKey,
-          slotPages: slotEntries,
-        ),
-      );
-      addAddedPages(slotKey);
     }
+    closeGroup();
 
     // Session and summary page
     pages.add(PageEntry(type: PageType.session, pageIndex: pageIndex, key: 'session'));

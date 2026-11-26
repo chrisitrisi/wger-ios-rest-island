@@ -79,6 +79,11 @@ void main() {
       }
     });
 
+    test('declares the exercise permission the workout import reads', () {
+      // Running and sauna minutes come from workouts, see HealthWorkoutImporter
+      expect(manifest, contains('android:name="android.permission.health.READ_EXERCISE"'));
+    });
+
     test('declares the history permission', () {
       // Without it Health Connect silently caps every read at 30 days, which
       // makes the first import look complete while missing everything before
