@@ -111,6 +111,11 @@ DayData? shortcutDay(Iterable<DayData> days, String name, DateTime today) {
   });
 }
 
+/// Whether a stored workout should be continued when wger opens: it was
+/// started (it left the start page) and is still inside its time window.
+bool shouldResumeWorkout(WorkoutProgress? progress, DateTime now) =>
+    progress != null && progress.currentPageKey != 'start' && progress.validUntil.isAfter(now);
+
 final workoutShortcutsProvider = Provider<void>((ref) {
   if (kIsWeb || defaultTargetPlatform != TargetPlatform.iOS) {
     return;
@@ -167,6 +172,49 @@ final workoutShortcutsProvider = Provider<void>((ref) {
       logger.warning('Workout link ${call.method} failed: ${e.message}');
     }
   }
+
+  // iOS ends a backgrounded app whenever it needs the memory, and wger then
+  // starts on the dashboard: the stored progress only came back once the day
+  // was opened again by hand. Continue such a workout right away, through the
+  // same 'start' path a shortcut takes, once the session is there (on launch
+  // and after a re-login).
+  Future<void> resumeInterruptedWorkout() async {
+    if (ref.read(gymModeVisibleProvider)) {
+      return;
+    }
+    final raw = await PreferenceHelper.asyncPref.getString(PREFS_WORKOUT_PROGRESS);
+    WorkoutProgress? stored;
+    try {
+      stored = raw == null
+          ? null
+          : WorkoutProgress.fromJson(jsonDecode(raw) as Map<String, dynamic>);
+    } catch (e) {
+      logger.warning('Ignoring unreadable stored workout progress: $e');
+    }
+    if (!shouldResumeWorkout(stored, clock.now())) {
+      return;
+    }
+    try {
+      logger.info('Continuing the workout that was interrupted in the background');
+      await handle(const MethodCall('start', {'day': ''}));
+    } on PlatformException catch (e) {
+      logger.info('Could not continue the interrupted workout: ${e.message}');
+    }
+  }
+
+  ref.listen(authProvider, (previous, next) {
+    final loggedIn = next.value?.status == AuthStatus.loggedIn;
+    final wasLoggedIn = previous?.value?.status == AuthStatus.loggedIn;
+    if (loggedIn && !wasLoggedIn) {
+      unawaited(
+        Future<void>(() async {
+          // Let the home screen build first, gym mode goes on top of it
+          await WidgetsBinding.instance.endOfFrame;
+          await resumeInterruptedWorkout();
+        }),
+      );
+    }
+  }, fireImmediately: true);
 
   final appLinks = AppLinks();
   final linkSub = appLinks.uriLinkStream.listen(onLink);

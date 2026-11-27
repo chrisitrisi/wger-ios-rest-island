@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:wger/features/routines/models/workout_progress.dart';
 import 'package:wger/features/routines/notifications/workout_notification_content.dart';
 import 'package:wger/features/routines/workout_shortcuts.dart';
 
@@ -107,5 +108,36 @@ void main() {
     expect(shortcutLinkCall(Uri.parse('wger://workout/logValues')), isNull);
     expect(shortcutLinkCall(Uri.parse('wger://workout/start/now')), isNull);
     expect(shortcutLinkCall(Uri.parse('noop://workout/start')), isNull);
+  });
+
+  group('shouldResumeWorkout', () {
+    final now = DateTime.utc(2026, 11, 27, 18);
+    WorkoutProgress progress({
+      String page = 'slot-3',
+      Duration validFor = const Duration(hours: 2),
+    }) => WorkoutProgress(
+      dayId: 7,
+      iteration: 1,
+      currentPageKey: page,
+      workoutStart: now.subtract(const Duration(minutes: 40)),
+      validUntil: now.add(validFor),
+    );
+
+    test('continues a started workout that is still running', () {
+      expect(shouldResumeWorkout(progress(), now), isTrue);
+    });
+
+    test('leaves a workout that never left the start page alone', () {
+      expect(shouldResumeWorkout(progress(page: 'start'), now), isFalse);
+    });
+
+    test('leaves an expired workout alone, the window end included', () {
+      expect(shouldResumeWorkout(progress(validFor: const Duration(minutes: -1)), now), isFalse);
+      expect(shouldResumeWorkout(progress(validFor: Duration.zero), now), isFalse);
+    });
+
+    test('nothing stored, nothing to continue', () {
+      expect(shouldResumeWorkout(null, now), isFalse);
+    });
   });
 }
