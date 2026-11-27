@@ -168,11 +168,27 @@ jobs:
         run: |
           read -r name number < version.txt
           tag="workout-shortcuts-${GITHUB_SHA:0:8}"
+          # What's New: the commit subjects since the build the current source points at (merges left out,
+          # the conventional "type(scope): " prefix dropped), so SideStore shows what an update brings.
+          notes=""
+          prev_url=$(curl -fsSL "https://github.com/${GITHUB_REPOSITORY}/releases/download/sidestore/altstore-source.json" 2>/dev/null \
+                     | jq -r '.apps[0].versions[0].downloadURL // empty' || true)
+          prev_tag=$(printf '%s' "$prev_url" | sed -nE 's#.*/releases/download/([^/]+)/.*#\1#p')
+          if [ -n "$prev_tag" ] && [ "$prev_tag" != "$tag" ]; then
+            notes=$(gh api "repos/${GITHUB_REPOSITORY}/compare/${prev_tag}...${GITHUB_SHA}" \
+                      --jq '.commits[].commit.message | split("\n")[0]' 2>/dev/null \
+                    | grep -vE '^Merge ' \
+                    | sed -E 's/^[a-z]+(\([^)]*\))?!?: //; s/^(.)/\U\1/; s/^/• /' \
+                    | head -15 || true)
+          fi
+          [ -n "$notes" ] || notes="Build ${number}"
+          gh release edit "$tag" --repo "$GITHUB_REPOSITORY" --notes "$notes" || true
           size=$(stat -c %s wger-RestIsland-Shortcuts.ipa)
           url="https://github.com/${GITHUB_REPOSITORY}/releases/download/${tag}/wger-RestIsland-Shortcuts.ipa"
           jq -n \
             --arg repo "$GITHUB_REPOSITORY" --arg name "$name" --arg number "$number" \
-            --arg date "$(date -u +%Y-%m-%dT%H:%M:%SZ)" --arg url "$url" --argjson size "$size" '
+            --arg date "$(date -u +%Y-%m-%dT%H:%M:%SZ)" --arg url "$url" --argjson size "$size" \
+            --arg notes "$notes" '
             {
               name: "wger (chrisitrisi)",
               identifier: "at.chrisitrisi.wger.altstore",
@@ -187,11 +203,11 @@ jobs:
                 localizedDescription: "wger with a workout Live Activity, Shortcuts actions and a daily water card that writes to Apple Health.",
                 iconURL: ("https://raw.githubusercontent.com/" + $repo + "/master/ios/Runner/Assets.xcassets/AppIcon.appiconset/1024.png"),
                 tintColor: "2A4C7D",
-                version: $name, buildVersion: $number, versionDate: $date,
+                version: $name, buildVersion: $number, versionDate: $date, versionDescription: $notes,
                 downloadURL: $url, size: $size,
                 versions: [{
                   version: $name, buildVersion: $number, date: $date,
-                  localizedDescription: ("Build " + $number), downloadURL: $url, size: $size,
+                  localizedDescription: $notes, downloadURL: $url, size: $size,
                   minOSVersion: "15.0"
                 }]
               }],
