@@ -19,9 +19,11 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:wger/core/network/network_provider.dart';
+import 'package:wger/core/snackbar.dart';
 import 'package:wger/features/exercises/screens/add_exercise_screen.dart';
 import 'package:wger/features/exercises/screens/exercises_screen.dart';
 import 'package:wger/features/routines/models/routine.dart';
+import 'package:wger/features/routines/providers/lift_export_repository.dart';
 import 'package:wger/features/routines/providers/routines_notifier.dart';
 import 'package:wger/features/routines/screens/routine_edit_screen.dart';
 import 'package:wger/features/routines/screens/routine_logs_screen.dart';
@@ -30,6 +32,7 @@ import 'package:wger/l10n/generated/app_localizations.dart';
 enum _RoutineAppBarOptions {
   list,
   contribute,
+  exportForNoop,
 }
 
 enum _RoutineDetailBarOptions {
@@ -74,10 +77,17 @@ class RoutineListAppBar extends ConsumerWidget implements PreferredSizeWidget {
                   ],
                 ),
               ),
+              PopupMenuItem<_RoutineAppBarOptions>(
+                value: _RoutineAppBarOptions.exportForNoop,
+                child: Text(i18n.liftExportMenu),
+              ),
             ];
           },
-          onSelected: (value) {
+          onSelected: (value) async {
             switch (value) {
+              case _RoutineAppBarOptions.exportForNoop:
+                await _exportForNoop(context, ref);
+                break;
               case _RoutineAppBarOptions.contribute:
                 Navigator.of(context).pushNamed(AddExerciseScreen.routeName);
                 break;
@@ -89,6 +99,23 @@ class RoutineListAppBar extends ConsumerWidget implements PreferredSizeWidget {
         ),
       ],
     );
+  }
+
+  /// Writes every logged set as a CSV for NOOP's Lift Log import, into the
+  /// app's documents, which the Files app shows under On My iPhone > wger.
+  Future<void> _exportForNoop(BuildContext context, WidgetRef ref) async {
+    final i18n = AppLocalizations.of(context);
+    final languageCode = Localizations.localeOf(context).languageCode;
+    String message;
+    try {
+      final result = await ref.read(liftExportRepositoryProvider).export(languageCode);
+      message = i18n.liftExportDone(result.sessions, result.sets);
+    } catch (e) {
+      message = i18n.liftExportFailed;
+    }
+    if (context.mounted) {
+      showSnackbar(context, message, duration: const Duration(seconds: 8));
+    }
   }
 
   @override

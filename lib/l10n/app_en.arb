@@ -2081,5 +2081,26 @@
   "waterPermissionDenied": "Allow wger to read and write water in Apple Health or Health Connect to log drinks",
   "@waterPermissionDenied": {
     "description": "Snackbar when the user did not grant access to water data"
+  },
+  "liftExportMenu": "Export lifts for NOOP",
+  "@liftExportMenu": {
+    "description": "Menu entry that writes every logged set as a CSV file for the NOOP app"
+  },
+  "liftExportDone": "{sessions} workouts with {sets} sets saved. Find the file in Files under On My iPhone > wger.",
+  "@liftExportDone": {
+    "description": "Shown after the export",
+    "type": "text",
+    "placeholders": {
+      "sessions": {
+        "type": "int"
+      },
+      "sets": {
+        "type": "int"
+      }
+    }
+  },
+  "liftExportFailed": "The export failed",
+  "@liftExportFailed": {
+    "description": "Shown when the export could not be written"
   }
 }

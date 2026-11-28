@@ -1203,5 +1203,8 @@
     "waterGoal": "Tagesziel Wasser",
     "waterGoalReached": "Ziel erreicht",
     "waterNotSupported": "Zum Erfassen von Wasser wird Apple Health oder Health Connect benötigt",
-    "waterPermissionDenied": "Erlaube wger, Wasser in Apple Health oder Health Connect zu lesen und zu schreiben, um Getränke zu erfassen"
+    "waterPermissionDenied": "Erlaube wger, Wasser in Apple Health oder Health Connect zu lesen und zu schreiben, um Getränke zu erfassen",
+    "liftExportMenu": "Lifts für NOOP exportieren",
+    "liftExportDone": "{sessions} Trainings mit {sets} Sätzen gespeichert. Die Datei findest du in Dateien unter Auf meinem iPhone > wger.",
+    "liftExportFailed": "Der Export ist fehlgeschlagen"
 }
